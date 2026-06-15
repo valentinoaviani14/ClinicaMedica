@@ -15,3 +15,5 @@ El sistema muestra un resumen del turno y solicita confirmación. Si el usuario 
  Para instalar Entity Framework
 - dotnet add package Microsoft.EntityFrameworkCore
 - dotnet add package Microsoft.EntityFrameworkCore.Sqlite
+
+

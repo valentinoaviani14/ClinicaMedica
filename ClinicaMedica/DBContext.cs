@@ -15,7 +15,7 @@ namespace Clinicamedica
 
         protected override void OnConfiguring(DbContextOptionsBuilder options)
         {
-            options.UseSqlite(@"Data Source=C:\Users\PC\source\repos\Formas\ClinicaMedica\ClinicaMedica\ClinicaMedica.db");
+            options.UseSqlite(@"Data Source=C:\Users\Estudiante\OneDrive\Desktop\ClinicaMedica\ClinicaMedica\ClinicaMedica\ClinicaMedica.db");
         }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
