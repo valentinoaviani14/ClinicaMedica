@@ -1,8 +1,9 @@
 ﻿using Clinicamedica;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using System;
 using System.Linq;
-using System.Net;
+//using System.Net;
 
 namespace ClinicaMedica
 {
@@ -10,169 +11,190 @@ namespace ClinicaMedica
     {
         static void Main(string[] args)
         {
-            Prueba();
-            if (true) return;
             var context = new ClinicaContext();
 
-            //seleccionar y cargar todos los turnos y sus relaciones
-            var turnos = context.Turnos
-                .Include(t => t.Paciente)
-                .Include(t => t.Medico)
-                .Include(t => t.Especialidad)
-                .Include(t => t.Estado)
-                .OrderBy(t => t.Fecha)
-                .ThenBy(t => t.Hora)
-                .ToList();
+            Console.WriteLine("Clinica Medica");
+            Console.Write("Ingrese el DNI del paciente: ");
+            int dni = int.Parse(Console.ReadLine());
 
-            foreach (var t in turnos)
-            {
-                Console.WriteLine($"{t.Fecha} {t.Hora} | {t.Paciente.Nombre} {t.Paciente.Apellido} | {t.Medico.Nombre} {t.Medico.Apellido} | {t.Especialidad.Nombre} | {t.Estado.Descripcion}");
-            }
-
-            var turnos2 = context.Turnos.Where(t => t.Estado.Descripcion == "cancelado");
-            foreach (var turno in turnos2)
-            {
-                
-                Console.WriteLine($"{turno.Estado.Descripcion} | {turno.Especialidad.Nombre} | {turno.Paciente.Nombre}");
-            }
-
-            Paciente paciente = context.Pacientes.FirstOrDefault(p => p.Dni == 27999000);
-            Console.WriteLine($"{paciente.Nombre} {paciente.Apellido}");
-        }
-
-        static void Prueba()
-        {
-            Console.WriteLine("Prueba");
-            var context = new ClinicaContext();
-
-            //Ingresar DNI del paciente:
-            int dni;
-            while (true)
-            {
-                Console.Write("Ingrese DNI del paciente: ");
-                var input = Console.ReadLine();
-                if (string.IsNullOrWhiteSpace(input))
-                {
-                    Console.WriteLine("Entrada vacía. Intente de nuevo.");
-                    continue;
-                }
-
-                if (int.TryParse(input.Trim(), out dni))
-                {
-                    break;
-                }
-
-                Console.WriteLine("DNI inválido. Ingrese sólo números sin puntos ni espacios.");
-            }
-
-            // Buscar paciente en la base de datos
             var paciente = context.Pacientes.FirstOrDefault(p => p.Dni == dni);
-            if (paciente == null)
+            if (paciente != null)
             {
-                Console.WriteLine($"No se encontró ningún paciente con DNI {dni}.");
-                RegistrarNuevoPaciente(dni, context);
-            }
-            else
-            {
-                Console.WriteLine($"Paciente: {paciente.Nombre} {paciente.Apellido} | DNI: {paciente.Dni}");
-                TurnosReservados(dni, context);            
-            }
+                Console.WriteLine("Datos del paciente: ");
+                Console.WriteLine($"Nombre: {paciente.Nombre}{paciente.Apellido} | Telefono: {paciente.Telefono}");
 
-        }
-        static void TurnosReservados(int dni, ClinicaContext context)
-        {
-            var turnos = context.Turnos
-                .Include(t => t.Estado)
-                .Include(t => t.Especialidad)
-                .Include(t => t.Paciente)
-                .Where(t => t.Paciente != null
-                            && t.Paciente.Dni == dni
-                            && t.Estado != null
-                            && t.Estado.Descripcion == "reservado")
-                .OrderBy(t => t.Fecha)
-                .ThenBy(t => t.Hora)
-                .ToList();
+                var turnosReservados = context.Turnos
+                    .Include(t => t.Estado)
+                    .Include(t => t.Medico)
+                    .Where(t => t.Paciente.Dni == dni && t.Estado.Descripcion == "reservado")
+                    .ToList();
 
-            if (!turnos.Any())
-            {
-                Console.WriteLine($"El paciente con dni {dni} no tiene turnos reservados.");
-                return;
-            }
-
-            foreach (var turno in turnos)
-            {
-                DateTime fechaTurno;
-                string fecha;
-                if (DateTime.TryParse(turno.Fecha, out fechaTurno))
+                if (turnosReservados.Count == 0)
                 {
-                    fecha = fechaTurno.ToShortDateString();
+                    Console.WriteLine("El paciente no tiene turnos reservados");
                 }
                 else
                 {
-                    fecha = turno.Fecha; // Si no se puede convertir, mostrar el string original
+                    for (int i = 0; i < turnosReservados.Count; i++)
+                    {
+                        var t = turnosReservados[i];
+                        Console.WriteLine($"[{i + 1}] Fecha: {t.Fecha} {t.Hora} | Dr/a. {t.Medico.Apellido}");
+                    }
+                    Console.Write("\n¿Desea cancelar algún turno? (Ingrese el número del turno o 0 para omitir): ");
+                    int opcion = int.Parse(Console.ReadLine());
+
+                    if (opcion > 0 && opcion <= turnosReservados.Count)
+                    {
+                        var turnoACancelar = turnosReservados[opcion - 1];
+                        var estadoCancelado = context.Estados.FirstOrDefault(e => e.Descripcion == "cancelado");
+
+                        turnoACancelar.Estado = estadoCancelado;
+                        context.SaveChanges();
+
+                        Console.WriteLine("¡Turno cancelado con éxito!");
+                    }
                 }
-
-                var hora = turno.Hora;
-                var especialidad = turno.Especialidad?.Nombre ?? "sin especialidad";
-                var medico = turno.Medico != null ? $"{turno.Medico.Nombre} {turno.Medico.Apellido}" : "Médico desconocido";
-
-                Console.WriteLine($"{fecha} {hora} | {especialidad} | {medico}");
             }
-
-        }
-        static void RegistrarNuevoPaciente(int dni, ClinicaContext context)
-        {
-            //Ingresar los datos del nuevo paciente
-            string nombre = LeerRequerido("Nombre");
-            string apellido = LeerRequerido("Apellido");
-            string telefono = LeerOpcional("Teléfono (opcional)");
-            string email = LeerOpcional("Email (opcional)");
-
-            // Fecha de nacimiento: validar y almacenar en formato ISO (yyyy-MM-dd)
-            string fechaNacimiento;
-            while (true)
+            else
             {
-                Console.Write("Fecha de nacimiento (dd/MM/yyyy): ");
-                var entrada = Console.ReadLine();
-                if (DateTime.TryParse(entrada, out var dt))
+                Console.WriteLine("\nEl paciente no existe en el sistema");
+                Console.Write("Desea registrarlo ahora? (S/N): ");
+                string respuesta = Console.ReadLine().ToUpper();
+
+                if (respuesta == "S")
                 {
-                    fechaNacimiento = dt.ToString("yyyy-MM-dd");
-                    break;
+                    Console.WriteLine("\n--- Nuevo Registro de Paciente ---");
+
+                    Paciente nuevoPaciente = new Paciente();
+
+                    Console.Write("Dni: ");
+                    nuevoPaciente.Dni = int.Parse(Console.ReadLine());
+
+                    Console.Write("Nombre: ");
+                    nuevoPaciente.Nombre = Console.ReadLine();
+
+                    Console.Write("Apellido: ");
+                    nuevoPaciente.Apellido = Console.ReadLine();
+
+                    Console.Write("Teléfono: ");
+                    nuevoPaciente.Telefono = Console.ReadLine();
+
+                    Console.Write("Email: ");
+                    nuevoPaciente.Email = Console.ReadLine();
+
+                    Console.Write("Fecha de nacimiento (ej. DD/MM/AAAA): ");
+                    nuevoPaciente.FechaNacimiento = Console.ReadLine();
+
+                    context.Pacientes.Add(nuevoPaciente);
+                    context.SaveChanges();
+
+                    Console.WriteLine("\n¡Paciente registrado correctamente!");
+
+                    paciente = nuevoPaciente;
                 }
-                Console.WriteLine("Fecha inválida. Use formato dd/MM/yyyy o una fecha válida.");
             }
 
-            var nuevo = new Paciente
+            //2 — Seleccionar especialidad El sistema lista todas las especialidades disponibles y
+            //solicita al usuario que elija una.
+            Console.WriteLine("\nSELECCION DE ESPECIALIDAD");
+            var especialidades = context.Especialidades.ToList();
+            for (int i = 0; i < especialidades.Count; i++)
             {
-                Dni = dni,
-                Nombre = nombre,
-                Apellido = apellido,
-                Telefono = string.IsNullOrWhiteSpace(telefono) ? null : telefono,
-                Email = string.IsNullOrWhiteSpace(email) ? null : email,
-                FechaNacimiento = fechaNacimiento
-            };
-
-            context.Pacientes.Add(nuevo);
-            context.SaveChanges();
-
-            Console.WriteLine($"Paciente creado: {nuevo.Nombre} {nuevo.Apellido} | DNI: {nuevo.Dni}");
-        }
-
-        static string LeerRequerido(string etiqueta)
-        {
-            while (true)
-            {
-                Console.Write($"{etiqueta}: ");
-                var valor = Console.ReadLine();
-                if (!string.IsNullOrWhiteSpace(valor)) return valor.Trim();
-                Console.WriteLine($"{etiqueta} es obligatorio. Intente de nuevo.");
+                var t = especialidades[i];
+                Console.WriteLine($"[{i + 1}] | {t.Nombre} | {t.DuracionTurnoMin}");
             }
-        }
+            Console.Write("\nElegir una especialidad: (Ingrese el número de la especialidad o 0 para cancelar): ");
+            int opcionEspecialidad = int.Parse(Console.ReadLine());
 
-        static string LeerOpcional(string etiqueta)
-        {
-            Console.Write($"{etiqueta}: ");
-            return Console.ReadLine()?.Trim() ?? string.Empty;
+            if (opcionEspecialidad > 0 && opcionEspecialidad <= especialidades.Count)
+            {
+                var especialidadElegida = especialidades[opcionEspecialidad - 1];
+
+                Console.WriteLine("¡Especialidad elegida!");
+                //3 — Seleccionar médico El sistema lista los médicos que atienden la especialidad
+                //seleccionada y solicita que el usuario elija uno.
+                Console.WriteLine("\n SELECCION DE MEDICO");
+                var medicosDisponibles = context.Disponibilidades
+                    .Include(d => d.Medico)
+                    .Where(d => d.Especialidad.IdEspecialidad == especialidadElegida.IdEspecialidad)
+                    .Select(d => d.Medico)
+                    .Distinct()
+                    .ToList();
+
+                if (medicosDisponibles.Count == 0)
+                {
+                    Console.WriteLine("No hay médicos disponibles para esta especialidad en este momento.");
+                }
+                else
+                {
+                    for (int i = 0; i < medicosDisponibles.Count; i++)
+                    {
+                        var m = medicosDisponibles[i];
+                        Console.WriteLine($"[{i + 1}] | Dr/a. {m.Nombre} {m.Apellido}");
+                    }
+
+                    Console.Write("\nElegir un médico (Ingrese el número o 0 para cancelar): ");
+                    int opcionMedico = int.Parse(Console.ReadLine());
+
+                    if (opcionMedico > 0 && opcionMedico <= medicosDisponibles.Count)
+                    {
+                        var medicoElegido = medicosDisponibles[opcionMedico - 1];
+                        Console.WriteLine("Medico elegido!");
+                        //4 — Mostrar disponibilidad El sistema muestra los días y horarios en que el
+                        //médico elegido atiende esa especialidad.El usuario ingresa la fecha y hora deseada.
+                        Console.WriteLine($"\nDISPONIBILIDAD DEL DR/A. {medicoElegido.Apellido}");
+                        var disponibilidades = context.Disponibilidades
+                            .Where(d => d.Medico.Matricula == medicoElegido.Matricula && d.Especialidad.IdEspecialidad == especialidadElegida.IdEspecialidad)
+                            .ToList();
+                        
+                        if (disponibilidades.Count == 0)
+                        {
+                            Console.WriteLine("Este médico no tiene horarios de atención para esta especialidad.");
+                            return;
+                        }
+                        Console.WriteLine("Horarios de atención Semanales:");
+                        for (int i = 0; i < disponibilidades.Count; i++)
+                        {
+                            var d = disponibilidades[i];
+                            Console.WriteLine($"- {d.DiaSemana} de {d.HoraInicio} a {d.HoraFin}");
+                        }
+                        string fechaTurno = "";
+                        string horaTurno = "";
+                        bool turnoValido = false;
+                        while (turnoValido == false)
+                        {
+                            Console.Write("Ingrese la fecha para el turno (ej. DD/MM/AAAA): ");
+                            fechaTurno = Console.ReadLine();
+
+                            Console.Write("Ingrese la hora para el turno (ej. HH:MM): ");
+                            horaTurno = Console.ReadLine();
+                            for (int i = 0; i < disponibilidades.Count; i++)
+                            {
+                                var d = disponibilidades[i];
+                                if (horaTurno == d.HoraInicio)
+                                {
+                                    turnoValido = true; 
+                                    break;
+                                }
+                            }
+                            if (turnoValido == false)
+                            {
+                                Console.WriteLine("\nError: probablemente el formato es incorrecto.");
+                                Console.WriteLine("Por favor, mire la grilla e ingrese los datos de nuevo.\n");
+                            }
+                        }
+                        Console.WriteLine("\n Fecha y horario del Turno reservados correctamente!");
+                        //5 — Confirmar y registrar el turno El sistema muestra un resumen del turno y solicita confirmación.Si el usuario confirma, el turno se guarda con estado "reservado".
+
+                    }
+                }
+            }
+            else
+            {
+                Console.WriteLine("Operación cancelada.");
+                return;
+            }
         }
     }
 }
+      
