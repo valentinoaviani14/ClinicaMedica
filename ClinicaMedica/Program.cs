@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using System;
 using System.Linq;
+using System.Text.RegularExpressions;
 //using System.Net;
 
 namespace ClinicaMedica
@@ -11,6 +12,11 @@ namespace ClinicaMedica
     {
         static void Main(string[] args)
         {
+            //1 — Ingresar DNI del paciente El sistema solicita el DNI.
+            //Si el paciente existe, muestra sus datos incluidos los turnos reservados del paciente.
+            //Si el paciente desea cancelar un turno se selecciona el turno y se lo marca como cancelado.
+            //Si no existe, solicita nombre, apellido, teléfono, email y fecha de nacimiento,
+            //y lo registra.
             var context = new ClinicaContext();
 
             Console.WriteLine("Clinica Medica");
@@ -159,8 +165,9 @@ namespace ClinicaMedica
                             Console.WriteLine($"- {d.DiaSemana} de {d.HoraInicio} a {d.HoraFin}");
                         }
                         string fechaTurno = "";
-                        string horaTurno = "";
+                        string horaTurno = "";  
                         bool turnoValido = false;
+
                         while (turnoValido == false)
                         {
                             Console.Write("Ingrese la fecha para el turno (ej. DD/MM/AAAA): ");
@@ -168,24 +175,64 @@ namespace ClinicaMedica
 
                             Console.Write("Ingrese la hora para el turno (ej. HH:MM): ");
                             horaTurno = Console.ReadLine();
+
                             for (int i = 0; i < disponibilidades.Count; i++)
                             {
                                 var d = disponibilidades[i];
-                                if (horaTurno == d.HoraInicio)
+
+                                if (TimeSpan.TryParse(horaTurno, out TimeSpan horaIngresada))
                                 {
-                                    turnoValido = true; 
-                                    break;
+                                    TimeSpan inicio = TimeSpan.Parse(d.HoraInicio.ToString());
+                                    TimeSpan fin = TimeSpan.Parse(d.HoraFin.ToString());
+
+                                    if (horaIngresada >= inicio && horaIngresada <= fin)
+                                    {
+                                        turnoValido = true;
+                                        break;
+                                    }
                                 }
                             }
                             if (turnoValido == false)
                             {
-                                Console.WriteLine("\nError: probablemente el formato es incorrecto.");
-                                Console.WriteLine("Por favor, mire la grilla e ingrese los datos de nuevo.\n");
+                                Console.WriteLine("\nError: El médico no atiende en ese horario o el formato es incorrecto.");
+                                Console.WriteLine("Por favor, mire la tabla de disponibilidades e ingrese los datos de nuevo.\n");
                             }
                         }
                         Console.WriteLine("\n Fecha y horario del Turno reservados correctamente!");
                         //5 — Confirmar y registrar el turno El sistema muestra un resumen del turno y solicita confirmación.Si el usuario confirma, el turno se guarda con estado "reservado".
+                        Console.WriteLine("\n -- RESUMEN DEL TURNO --");
+                        Console.WriteLine($"Paciente:    {paciente.Nombre} {paciente.Apellido} (DNI: {paciente.Dni})");
+                        Console.WriteLine($"Especialidad:{especialidadElegida.Nombre}");
+                        Console.WriteLine($"Médico:      Dr/a. {medicoElegido.Nombre} {medicoElegido.Apellido}");
+                        Console.WriteLine($"Fecha y Hora:{fechaTurno} a las {horaTurno} hs.");
+                        Console.WriteLine("----");
 
+                        Console.Write("\n¿Confirma el registro de este turno? (S/N): ");
+                        string confirmacion = Console.ReadLine().ToUpper();
+
+                        if (confirmacion == "S")
+                        {
+                            Turno nuevoTurno = new Turno();
+                            nuevoTurno.Paciente = paciente;
+                            nuevoTurno.Medico = medicoElegido;
+                            nuevoTurno.Especialidad = especialidadElegida;
+                            nuevoTurno.Fecha = fechaTurno;
+                            nuevoTurno.Hora = horaTurno;
+
+                            var estadoReservado = context.Estados.FirstOrDefault(e => e.Descripcion == "reservado");
+                            nuevoTurno.Estado = estadoReservado;
+
+                            context.Turnos.Add(nuevoTurno);
+
+                            context.SaveChanges();
+
+                            Console.WriteLine("\n Turno RESERVADO con éxito en el sistema");
+                            Console.WriteLine("Gracias por usar el sistema, presione cualquier tecla para salir...");
+                        }
+                        else
+                        {
+                            Console.WriteLine("\nOperación cancelada. No se guardó el turno.");
+                        }
                     }
                 }
             }
